@@ -3,6 +3,24 @@ import idautils
 import idc
 import ida_kernwin
 
+blacklist = [
+    '__CxxThrowException',
+    '__invalid_parameter',
+    'nullsub_',
+    '__security_check_cookie',
+    '___report_gsfailure',
+    '___raise_securityfailure',
+    '__invoke_',
+    '__SEH_prolog',
+    '___acrt',
+    '___CxxFrameHandler',
+    '__InternalCxxFrameHandler'
+
+]
+
+default_to = 0
+default_from = 5
+
 class XrefFinderPlugin(idaapi.plugin_t):
     flags = idaapi.PLUGIN_UNL
     comment = "Xref Finder Plugin"
@@ -22,8 +40,12 @@ class XrefFinderPlugin(idaapi.plugin_t):
     def show_dialog(self):
         class XrefFinderForm(ida_kernwin.Form):
             def __init__(self):
-                self.depth_to = 1
-                self.depth_from = 1
+                self.depth_to = default_to
+                self.depth_from = default_from
+
+                current_ea = ida_kernwin.get_screen_ea()
+                default_func_name = idc.ida_funcs.get_func_name(current_ea) or ""
+
                 ida_kernwin.Form.__init__(self, r"""STARTITEM 0
 BUTTON YES* OK
 Xref Finder
@@ -33,7 +55,7 @@ Xref Finder
 <##xrefs to depth:{iDepthTo}>
 <##xrefs from depth:{iDepthFrom}>
 """, {
-                    'iFuncName': ida_kernwin.Form.StringInput(),
+                    'iFuncName': ida_kernwin.Form.StringInput(value=default_func_name),
                     'iDepthTo': ida_kernwin.Form.NumericInput(tp=ida_kernwin.Form.FT_DEC, value=self.depth_to),
                     'iDepthFrom': ida_kernwin.Form.NumericInput(tp=ida_kernwin.Form.FT_DEC, value=self.depth_from),
                     'FormChangeCb': ida_kernwin.Form.FormChangeCb(self.OnFormChange),
@@ -60,10 +82,14 @@ Xref Finder
 
         if current_depth > depth:
             return
+        
+        for black in blacklist:
+            if black in func_name:
+                return
 
         func_ea = idc.get_name_ea_simple(func_name)
         if func_ea == idc.BADADDR:
-            print(f"Function {func_name} not found.")
+            # print(f"Function {func_name} not found.")
             return
 
         called_functions = set()
@@ -96,7 +122,7 @@ Xref Finder
 
         func_ea = idc.get_name_ea_simple(func_name)
         if func_ea == idc.BADADDR:
-            print(f"Function {func_name} not found.")
+            # print(f"Function {func_name} not found.")
             return
 
         calling_functions = set()
