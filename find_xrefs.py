@@ -87,6 +87,7 @@ Xref Finder
 
         func_ea = idc.get_name_ea_simple(func_name)
         if func_ea == idc.BADADDR:
+            path.pop()
             try:
                 if func_name.startswith("0x"):
                     target_address = int(func_name, 16)
@@ -104,9 +105,12 @@ Xref Finder
                     break
             
             if lib_func:
-                print(f"{lib_func}")
-            else:
-                print(f"Function {func_name} not found!!")
+                # print(f"{lib_func}")
+                path.append(lib_func)
+                lst = " -> ".join(path)
+                print(lst)
+            # else:
+            #     print(f"Function {func_name} not found!!")
             return
 
         called_functions = set()
@@ -123,7 +127,7 @@ Xref Finder
                             called_functions.add((ref, ref_name))
 
         if current_depth == depth or not called_functions:
-            print(" -> ".join(path[1:]))
+            print(" -> ".join(path[:]))
         else:
             for addr, name in called_functions:
                 self.find_subfunctions(name, depth, current_depth + 1, path[:])
