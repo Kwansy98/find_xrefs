@@ -5,7 +5,7 @@ import ida_kernwin
 import re
 
 
-blacklist = [
+stoplist = [
     '__CxxThrowException',
     '__invalid_parameter',
     'nullsub_',
@@ -81,8 +81,9 @@ Xref Finder
         if current_depth > depth:
             return
         
-        for black in blacklist:
+        for black in stoplist:
             if black in func_name:
+                print(" -> ".join(path))
                 return
 
         func_ea = idc.get_name_ea_simple(func_name)
