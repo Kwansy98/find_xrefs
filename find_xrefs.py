@@ -3,7 +3,34 @@ import idautils
 import idc
 import ida_kernwin
 import re
+import os
+import json
 
+def get_config_path():
+    # Return the config file path in the IDA user directory.
+    return os.path.join(idaapi.get_user_idadir(), "xref_finder_config.json")
+
+def load_config():
+    # Load the depth settings from the config file. Default: default_from=1, default_to=0.
+    config_path = get_config_path()
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            return config.get("default_from", 1), config.get("default_to", 0)
+        except Exception:
+            return 1, 0
+    return 1, 0
+
+def save_config(default_from, default_to):
+    # Save the depth settings to the config file.
+    config_path = get_config_path()
+    config = {"default_from": default_from, "default_to": default_to}
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=4)
+
+# Load default depth values.
+default_from, default_to = load_config()
 
 blacklist = [
     '__CxxThrowException',
@@ -18,11 +45,7 @@ blacklist = [
     '___CxxFrameHandler',
     '__InternalCxxFrameHandler',
     '__errno'
-
 ]
-
-default_from = 1
-default_to = 0
 
 class XrefFinderPlugin(idaapi.plugin_t):
     flags = idaapi.PLUGIN_UNL
@@ -43,9 +66,11 @@ class XrefFinderPlugin(idaapi.plugin_t):
     def show_dialog(self):
         class XrefFinderForm(ida_kernwin.Form):
             def __init__(self):
+                # Use default depths loaded from the config file.
                 self.depth_to = default_to
                 self.depth_from = default_from
                 current_ea = ida_kernwin.get_screen_ea()
+                # Get the function name based on the current cursor.
                 default_func_name = idc.ida_funcs.get_func_name(current_ea) or ""
                 ida_kernwin.Form.__init__(self, r"""STARTITEM 0
 BUTTON YES* OK
@@ -70,6 +95,9 @@ Xref Finder
             func_name = form.iFuncName.value
             depth_to = form.iDepthTo.value
             depth_from = form.iDepthFrom.value
+            global default_from, default_to
+            default_from, default_to = depth_from, depth_to
+            save_config(default_from, default_to)
             self.find_xrefs(func_name, depth_to, depth_from)
         form.Free()
 
@@ -93,22 +121,18 @@ Xref Finder
                     target_address = int(func_name)
             except ValueError:
                 return
+            lib_func = None
             for xref in idautils.XrefsTo(target_address, idaapi.XREF_FAR):
                 is_data_xref = (xref.type & idaapi.XREF_DATA) != 0
                 if not is_data_xref:
                     disasm = idc.GetDisasm(xref.frm)
                     parts = re.split(r'[^a-zA-Z0-9]', disasm)
                     lib_func = parts[-1] if parts and parts[-1] else None
-                    
                     break
-            
             if lib_func:
-                # print(f"{lib_func}")
                 path.append(lib_func)
                 lst = " -> ".join(path)
                 print(lst)
-            # else:
-            #     print(f"Function {func_name} not found!!")
             return
         called_functions = set()
         for (startea, endea) in idautils.Chunks(func_ea):
@@ -122,7 +146,7 @@ Xref Finder
                         if ref_name and ref_name != func_name:
                             called_functions.add((ref, ref_name))
         if current_depth == depth or not called_functions:
-            print(" -> ".join(path[:]))
+            print(" -> ".join(path))
         else:
             for addr, name in called_functions:
                 self.find_subfunctions(name, depth, current_depth + 1, path[:])
